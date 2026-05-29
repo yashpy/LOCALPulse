@@ -1,0 +1,98 @@
+{
+  "name": "LocalPulse — Weekly Insights Digest",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "weeks", "triggerAtDay": [1], "triggerAtHour": 8 }]
+        }
+      },
+      "id": "cron-weekly",
+      "name": "Every Monday 8am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.LOCALPULSE_API_URL }}/api/businesses",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "id": "fetch-businesses",
+      "name": "Fetch All Active Businesses",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "businesses",
+        "options": {}
+      },
+      "id": "split-businesses",
+      "name": "Split Businesses",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.LOCALPULSE_API_URL }}/api/reviews/{{ $json.id }}?googlePlaceId={{ $json.google_place_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "id": "fetch-reviews",
+      "name": "Fetch Reviews",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.LOCALPULSE_API_URL }}/api/insights/weekly",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "businessName", "value": "={{ $('Split Businesses').item.json.name }}" },
+            { "name": "avgRating", "value": "={{ $json.avgRating }}" },
+            { "name": "recentReviews", "value": "={{ $json.reviews.slice(0,5).map(r => r.text) }}" }
+          ]
+        }
+      },
+      "id": "generate-insights",
+      "name": "Generate AI Insights",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.SMTP_USER }}",
+        "toEmail": "={{ $('Split Businesses').item.json.owner_email }}",
+        "subject": "📊 Your Weekly Business Report — {{ $('Split Businesses').item.json.name }}",
+        "emailType": "html",
+        "message": "=<!DOCTYPE html><html><body style='font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px'><div style='background:#1a1a2e;color:white;padding:20px;border-radius:8px 8px 0 0'><h1 style='margin:0'>📊 Weekly Pulse Report</h1><p style='opacity:0.8;margin:4px 0'>{{ $('Split Businesses').item.json.name }}</p></div><div style='border:1px solid #eee;padding:20px;border-radius:0 0 8px 8px'><h2>This Week's Summary</h2><p>{{ $json.insights.summary }}</p><div style='background:#f8f9fa;padding:16px;border-radius:8px;margin:16px 0'><h3 style='margin-top:0;color:#e94560'>🔍 Top Insight</h3><p>{{ $json.insights.topInsight }}</p></div><div style='background:#f0fff4;padding:16px;border-radius:8px;margin:16px 0'><h3 style='margin-top:0;color:#2d7a40'>✅ This Week's Action</h3><p>{{ $json.insights.recommendation }}</p></div><div style='background:#fff8e1;padding:16px;border-radius:8px;margin:16px 0'><h3 style='margin-top:0;color:#f57f17'>💡 Promotion Idea</h3><p>{{ $json.insights.promotionIdea }}</p></div><p style='color:#999;font-size:12px'>LocalPulse — Built for Tempe businesses by an ASU student</p></div></body></html>"
+      },
+      "id": "send-digest",
+      "name": "Send Weekly Digest Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    }
+  ],
+  "connections": {
+    "Every Monday 8am": { "main": [[{ "node": "Fetch All Active Businesses", "type": "main", "index": 0 }]] },
+    "Fetch All Active Businesses": { "main": [[{ "node": "Split Businesses", "type": "main", "index": 0 }]] },
+    "Split Businesses": { "main": [[{ "node": "Fetch Reviews", "type": "main", "index": 0 }]] },
+    "Fetch Reviews": { "main": [[{ "node": "Generate AI Insights", "type": "main", "index": 0 }]] },
+    "Generate AI Insights": { "main": [[{ "node": "Send Weekly Digest Email", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "LocalPulse" }]
+}

@@ -1,0 +1,102 @@
+{
+  "name": "LocalPulse — Slow Hours SMS Promo",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "hours", "minutesInterval": 2, "triggerAtMinute": 0 }
+          ]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Every 2 Hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Check if current hour is a historically slow period\n// This is a simple heuristic — in production you'd use real foot traffic data\nconst now = new Date();\nconst hour = now.getHours();\nconst day = now.getDay(); // 0=Sun, 1=Mon...\n\n// Slow periods: weekday afternoons (2-5pm) and early evenings on slow days (Mon-Wed)\nconst isWeekdaySlowAfternoon = day >= 1 && day <= 5 && hour >= 14 && hour <= 17;\nconst isSlowDayEvening = (day === 2 || day === 3) && hour >= 18 && hour <= 20; // Tue/Wed\n\nconst isSlow = isWeekdaySlowAfternoon || isSlowDayEvening;\n\nreturn [{\n  json: {\n    isSlow,\n    currentHour: hour,\n    currentDay: ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][day],\n    slowPeriod: `${hour}:00-${hour+2}:00 on ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][day]}`\n  }\n}];"
+      },
+      "id": "check-slow-period",
+      "name": "Check If Currently Slow",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $json.isSlow }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ]
+        }
+      },
+      "id": "is-slow",
+      "name": "Is It Slow Right Now?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.LOCALPULSE_API_URL }}/api/businesses",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "id": "fetch-businesses",
+      "name": "Fetch Businesses With SMS Enabled",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "businesses",
+        "options": {}
+      },
+      "id": "split-businesses",
+      "name": "Split Businesses",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.LOCALPULSE_API_URL }}/api/automation/sms-promo",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "businessName", "value": "={{ $json.name }}" },
+            { "name": "businessType", "value": "={{ $json.type }}" },
+            { "name": "slowPeriod", "value": "={{ $('Check If Currently Slow').item.json.slowPeriod }}" },
+            { "name": "phoneNumbers", "value": "={{ $json.opted_in_customers || [] }}" }
+          ]
+        }
+      },
+      "id": "send-sms-promo",
+      "name": "Send SMS Promo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1340, 200]
+    }
+  ],
+  "connections": {
+    "Every 2 Hours": { "main": [[{ "node": "Check If Currently Slow", "type": "main", "index": 0 }]] },
+    "Check If Currently Slow": { "main": [[{ "node": "Is It Slow Right Now?", "type": "main", "index": 0 }]] },
+    "Is It Slow Right Now?": { "main": [[{ "node": "Fetch Businesses With SMS Enabled", "type": "main", "index": 0 }], []] },
+    "Fetch Businesses With SMS Enabled": { "main": [[{ "node": "Split Businesses", "type": "main", "index": 0 }]] },
+    "Split Businesses": { "main": [[{ "node": "Send SMS Promo", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "LocalPulse" }]
+}

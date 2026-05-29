@@ -1,0 +1,123 @@
+{
+  "name": "LocalPulse — Auto Review Responder",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "hours", "minutesInterval": 6 }]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Every 6 Hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.LOCALPULSE_API_URL }}/api/businesses",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "fetch-businesses",
+      "name": "Fetch All Businesses",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "businesses",
+        "options": {}
+      },
+      "id": "split-businesses",
+      "name": "Split Into Individual Businesses",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.LOCALPULSE_API_URL }}/api/reviews/{{ $json.id }}?googlePlaceId={{ $json.google_place_id }}&yelpId={{ $json.yelp_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "fetch-reviews",
+      "name": "Fetch Reviews",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.reviews.filter(r => !r.responded).length }}",
+              "rightValue": 0,
+              "operator": { "type": "number", "operation": "gt" }
+            }
+          ]
+        }
+      },
+      "id": "check-unresponded",
+      "name": "Has Unresponded Reviews?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.LOCALPULSE_API_URL }}/api/reviews/respond-batch",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "reviews", "value": "={{ $json.reviews }}" },
+            { "name": "businessName", "value": "={{ $('Split Into Individual Businesses').item.json.name }}" },
+            { "name": "businessType", "value": "={{ $('Split Into Individual Businesses').item.json.type }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "generate-responses",
+      "name": "Generate AI Responses",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.SMTP_USER }}",
+        "toEmail": "={{ $('Split Into Individual Businesses').item.json.owner_email }}",
+        "subject": "📬 {{ $('Split Into Individual Businesses').item.json.name }} — New Reviews Need Responses",
+        "emailType": "html",
+        "message": "=<h2>Hi! You have {{ $json.count }} unresponded reviews.</h2><p>Here are your AI-generated responses — review and post them:</p>{{ $json.reviews.map(r => `<div style='border:1px solid #eee;padding:12px;margin:8px 0'><strong>${r.rating}⭐ — ${r.author}</strong><p>${r.text}</p><p><em>Suggested response:</em> ${r.suggestedResponse}</p></div>`).join('') }}<p>Log in to your LocalPulse dashboard to post these responses.</p>"
+      },
+      "id": "email-owner",
+      "name": "Email Owner With Responses",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [1560, 200]
+    }
+  ],
+  "connections": {
+    "Every 6 Hours": { "main": [[{ "node": "Fetch All Businesses", "type": "main", "index": 0 }]] },
+    "Fetch All Businesses": { "main": [[{ "node": "Split Into Individual Businesses", "type": "main", "index": 0 }]] },
+    "Split Into Individual Businesses": { "main": [[{ "node": "Fetch Reviews", "type": "main", "index": 0 }]] },
+    "Fetch Reviews": { "main": [[{ "node": "Has Unresponded Reviews?", "type": "main", "index": 0 }]] },
+    "Has Unresponded Reviews?": { "main": [[{ "node": "Generate AI Responses", "type": "main", "index": 0 }], []] },
+    "Generate AI Responses": { "main": [[{ "node": "Email Owner With Responses", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [{ "name": "LocalPulse" }],
+  "meta": { "instanceId": "localpulse" }
+}
