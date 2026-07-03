@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>LOCALPulse · Sign in</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+<div class="login-wrap">
+  <h1><span class="brand"><span class="dot"></span>LOCALPulse</span></h1>
+  <p class="sub">Real-time signal for Tempe business owners.</p>
+
+  <form id="login-form">
+    <label for="email">Email</label>
+    <input id="email" type="email" required autocomplete="username" />
+
+    <label for="password">Password</label>
+    <input id="password" type="password" required autocomplete="current-password" />
+
+    <button type="submit" style="margin-top:20px; width:100%;">Sign in</button>
+    <p class="error hidden" id="err"></p>
+  </form>
+
+  <p style="margin-top:22px; font-size:12px; color:var(--muted);">
+    Business owner? <a href="/request-access.html">Request an account</a> — an admin reviews and approves it.
+  </p>
+</div>
+
+<script src="/js/config.js"></script>
+<script src="/js/api.js"></script>
+<script>
+document.getElementById('login-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const err = document.getElementById('err');
+  err.classList.add('hidden');
+  try {
+    const data = await api('/auth/login', { method: 'POST', body: { email, password } });
+    Auth.set(data.token, data.user);
+    window.location.href = data.user.role === 'admin' ? '/admin.html' : '/owner.html';
+  } catch (e2) {
+    err.textContent = e2.message;
+    err.classList.remove('hidden');
+  }
+});
+</script>
+</body>
+</html>

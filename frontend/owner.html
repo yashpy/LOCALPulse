@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>LOCALPulse · Owner Dashboard</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand"><span class="dot"></span>LOCALPulse <span class="place">/ Tempe, AZ</span></div>
+  <div class="who">
+    <span id="who-name"></span>
+    <button class="ghost small" id="logout">Sign out</button>
+    <button class="danger small" id="delete-account">Delete my account</button>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="section-head">
+    <div>
+      <div class="eyebrow">Your business</div>
+      <h2>Live performance</h2>
+    </div>
+  </div>
+
+  <div id="content"><div class="empty">Loading…</div></div>
+</div>
+
+<!-- Chatbot -->
+<div class="chatbot">
+  <div class="chatbot-panel hidden" id="chat-panel">
+    <div class="chat-head">
+      <span>Improvement advisor</span>
+      <button class="ghost small" id="chat-close">✕</button>
+    </div>
+    <div class="chatbot-messages" id="chat-messages"></div>
+    <div class="chatbot-input">
+      <input id="chat-input" placeholder="Ask how to improve…" />
+      <button id="chat-send">Send</button>
+    </div>
+  </div>
+  <div class="chatbot-toggle" id="chat-toggle">AI</div>
+</div>
+
+<script src="/js/config.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/chatbot.js"></script>
+<script src="/js/owner.js"></script>
+</body>
+</html>
