@@ -117,3 +117,6 @@ serverless function and serves `frontend/` as static files — same pattern
 as before. Push to GitHub, import the repo in Vercel, add the env vars from
 `.env.example`, deploy, then run `npm run seed` once against your
 production `DATABASE_URL` to create the admin account.
+
+LIVE link: **https://local-pulse-2026.vercel.app/**
+**Note: IAM only restricts admin access, please reach out for admin access **
