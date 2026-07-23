@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>LOCALPulse — Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0B1220; --panel:#101A2E; --panel2:#0C1526; --line:#1E2C46;
+    --pulse:#00D9A3; --amber:#FFB454; --red:#FF6B6B;
+    --text:#E7ECF5; --muted:#8593AD;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--bg); color:var(--text); font-family:'Inter',sans-serif;}
+  h1,h2,h3{font-family:'Space Grotesk',sans-serif; margin:0;}
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:16px 28px; border-bottom:1px solid var(--line); background:var(--panel);
+  }
+  .brand{display:flex; align-items:center; gap:10px;}
+  .pulse-line{stroke:var(--pulse); stroke-width:2; fill:none;}
+  .role-badge{
+    font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--pulse);
+    border:1px solid var(--pulse); padding:2px 8px; border-radius:20px; margin-left:10px;
+  }
+  .signout{background:none; border:1px solid var(--line); color:var(--muted); padding:8px 14px; border-radius:8px; cursor:pointer; font-family:inherit;}
+  .signout:hover{color:var(--text); border-color:var(--muted);}
+  main{padding:28px; max-width:1100px; margin:0 auto;}
+  .toolbar{display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;}
+  .btn{
+    background:var(--pulse); color:#052A21; border:none; padding:10px 16px; border-radius:8px;
+    font-weight:600; cursor:pointer; font-family:'Space Grotesk',sans-serif; font-size:13px;
+  }
+  .btn.secondary{background:transparent; border:1px solid var(--line); color:var(--text);}
+  .btn.danger{background:var(--red); color:#2A0808;}
+  .btn:disabled{opacity:.5; cursor:not-allowed;}
+  .grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(300px,1fr)); gap:16px;}
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:18px;}
+  .card h3{font-size:16px;}
+  .addr{color:var(--muted); font-size:13px; margin-top:2px;}
+  .stats{display:flex; gap:18px; margin-top:14px;}
+  .stat{}
+  .stat .num{font-family:'Space Grotesk',sans-serif; font-size:20px;}
+  .stat .lbl{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em;}
+  .card-actions{display:flex; gap:8px; margin-top:16px; flex-wrap:wrap;}
+  .card-actions button{font-size:12px; padding:7px 10px;}
+  .empty{color:var(--muted); text-align:center; padding:60px 0;}
+  .modal-backdrop{
+    position:fixed; inset:0; background:rgba(4,8,16,.6); display:flex; align-items:center; justify-content:center; z-index:10;
+  }
+  .modal{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:24px; width:420px; max-height:85vh; overflow:auto;}
+  .modal h2{font-size:18px; margin-bottom:16px;}
+  label{display:block; font-size:12px; color:var(--muted); margin:12px 0 5px; text-transform:uppercase; letter-spacing:.05em;}
+  input, textarea{
+    width:100%; padding:9px 11px; border-radius:7px; border:1px solid var(--line);
+    background:var(--panel2); color:var(--text); font-size:14px; font-family:inherit; resize:vertical;
+  }
+  input:focus, textarea:focus{outline:none; border-color:var(--pulse);}
+  .modal-actions{display:flex; justify-content:flex-end; gap:8px; margin-top:20px;}
+  .err{color:var(--red); font-size:13px; margin-top:10px;}
+  .chat-log{max-height:220px; overflow:auto; display:flex; flex-direction:column; gap:8px; margin:12px 0;}
+  .chat-msg{padding:8px 10px; border-radius:8px; font-size:13px; line-height:1.4;}
+  .chat-msg.user{background:var(--panel2); align-self:flex-end; max-width:85%;}
+  .chat-msg.assistant{background:#0F2A24; border:1px solid var(--line); max-width:90%;}
+  .review{border-top:1px solid var(--line); padding-top:8px; margin-top:8px; font-size:12px; color:var(--muted);}
+  .loading{color:var(--muted); font-size:13px;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="/js/config.js"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin></script>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useCallback } = React;
+const API = window.LP_CONFIG.API_BASE;
+
+function authHeaders() {
+  const token = localStorage.getItem('lp_token');
+  return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+}
+
+async function apiFetch(path, opts = {}) {
+  const res = await fetch(`${API}${path}`, { ...opts, headers: authHeaders() });
+  if (res.status === 401) {
+    localStorage.removeItem('lp_token');
+    window.location.href = '/index.html';
+    throw new Error('Session expired');
+  }
+  const isJson = res.headers.get('content-type')?.includes('application/json');
+  const data = isJson ? await res.json() : null;
+  if (!res.ok) throw new Error(data?.error || `Request failed (${res.status})`);
+  return data;
+}
+
+function PulseLogo() {
+  return (
+    <svg width="26" height="18" viewBox="0 0 60 20">
+      <polyline className="pulse-line" points="0,10 14,10 19,2 25,18 31,10 60,10" />
+    </svg>
+  );
+}
+
+function NewOwnerModal({ onClose, onCreated }) {
+  const [form, setForm] = useState({ email: '', password: '', businessName: '', address: '' });
+  const [err, setErr] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setSaving(true); setErr('');
+    try {
+      await apiFetch('/api/auth/owners', { method: 'POST', body: JSON.stringify(form) });
+      onCreated();
+      onClose();
+    } catch (e) { setErr(e.message); } finally { setSaving(false); }
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
+        <h2>New owner account</h2>
+        <form onSubmit={submit}>
+          <label>Owner email</label>
+          <input required type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
+          <label>Temporary password</label>
+          <input required type="text" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} />
+          <label>Business name</label>
+          <input required value={form.businessName} onChange={e => setForm({ ...form, businessName: e.target.value })} />
+          <label>Address (Tempe, AZ)</label>
+          <input value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} placeholder="e.g. 500 S Mill Ave, Tempe, AZ" />
+          {err && <div className="err">{err}</div>}
+          <div className="modal-actions">
+            <button type="button" className="btn secondary" onClick={onClose}>Cancel</button>
+            <button type="submit" className="btn" disabled={saving}>{saving ? 'Creating…' : 'Create account'}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function EditModal({ business, onClose, onSaved }) {
+  const [form, setForm] = useState({
+    name: business.name || '', address: business.address || '',
+    yelpId: business.yelp_id || '', googlePlaceId: business.google_place_id || '',
+  });
+  const [err, setErr] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setSaving(true); setErr('');
+    try {
+      await apiFetch(`/api/businesses/${business.id}`, { method: 'PUT', body: JSON.stringify(form) });
+      onSaved();
+      onClose();
+    } catch (e) { setErr(e.message); } finally { setSaving(false); }
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
+        <h2>Edit business</h2>
+        <form onSubmit={submit}>
+          <label>Name</label>
+          <input required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
+          <label>Address</label>
+          <input value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} />
+          <label>Yelp business ID (pin manually, optional)</label>
+          <input value={form.yelpId} onChange={e => setForm({ ...form, yelpId: e.target.value })} />
+          <label>Google Place ID (pin manually, optional)</label>
+          <input value={form.googlePlaceId} onChange={e => setForm({ ...form, googlePlaceId: e.target.value })} />
+          {err && <div className="err">{err}</div>}
+          <div className="modal-actions">
+            <button type="button" className="btn secondary" onClick={onClose}>Cancel</button>
+            <button type="submit" className="btn" disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function AdvisorModal({ business, onClose }) {
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [asking, setAsking] = useState(false);
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    apiFetch(`/api/businesses/${business.id}/chat`)
+      .then(d => setMessages(d.messages))
+      .catch(e => setErr(e.message))
+      .finally(() => setLoading(false));
+  }, [business.id]);
+
+  const ask = async (e) => {
+    e.preventDefault();
+    const question = input.trim();
+    setAsking(true); setErr('');
+    try {
+      const data = await apiFetch(`/api/businesses/${business.id}/advisor`, {
+        method: 'POST', body: JSON.stringify({ message: question || undefined }),
+      });
+      setMessages(prev => [...prev, { role: 'user', content: question || '(summary request)' }, { role: 'assistant', content: data.reply }]);
+      setInput('');
+    } catch (e) { setErr(e.message); } finally { setAsking(false); }
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
+        <h2>AI advisor — {business.name}</h2>
+        {loading ? <div className="loading">Loading history…</div> : (
+          <div className="chat-log">
+            {messages.length === 0 && <div className="loading">No conversation yet. Ask for a summary below.</div>}
+            {messages.map((m, i) => (
+              <div key={i} className={`chat-msg ${m.role}`}>{m.content}</div>
+            ))}
+          </div>
+        )}
+        <form onSubmit={ask}>
+          <label>Ask about your ratings & reviews</label>
+          <textarea rows="2" placeholder="Leave blank for a general summary…" value={input} onChange={e => setInput(e.target.value)} />
+          {err && <div className="err">{err}</div>}
+          <div className="modal-actions">
+            <button type="button" className="btn secondary" onClick={onClose}>Close</button>
+            <button type="submit" className="btn" disabled={asking}>{asking ? 'Thinking…' : 'Ask'}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function BusinessCard({ biz, isAdmin, onChanged }) {
+  const [refreshing, setRefreshing] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [advising, setAdvising] = useState(false);
+  const [err, setErr] = useState('');
+
+  const refresh = async () => {
+    setRefreshing(true); setErr('');
+    try {
+      await apiFetch(`/api/businesses/${biz.id}/refresh`, { method: 'POST' });
+      onChanged();
+    } catch (e) { setErr(e.message); } finally { setRefreshing(false); }
+  };
+
+  const remove = async () => {
+    if (!confirm(`Delete ${biz.name}? This also deletes its chat history.`)) return;
+    try {
+      await apiFetch(`/api/businesses/${biz.id}`, { method: 'DELETE' });
+      onChanged();
+    } catch (e) { setErr(e.message); }
+  };
+
+  const yelp = biz.cached_data?.yelp;
+  const google = biz.cached_data?.google;
+
+  return (
+    <div className="card">
+      <h3>{biz.name}</h3>
+      {biz.address && <div className="addr">{biz.address}</div>}
+
+      <div className="stats">
+        <div className="stat">
+          <div className="num">{yelp && !yelp.error ? `${yelp.rating}★` : '—'}</div>
+          <div className="lbl">Yelp ({yelp && !yelp.error ? yelp.reviewCount : 0})</div>
+        </div>
+        <div className="stat">
+          <div className="num">{google && !google.error ? `${google.rating}★` : '—'}</div>
+          <div className="lbl">Google ({google && !google.error ? google.userRatingsTotal : 0})</div>
+        </div>
+      </div>
+
+      {biz.cached_at && <div className="addr" style={{marginTop:10}}>Last refreshed {new Date(biz.cached_at).toLocaleString()}</div>}
+      {err && <div className="err">{err}</div>}
+
+      <div className="card-actions">
+        <button className="btn" onClick={refresh} disabled={refreshing}>{refreshing ? 'Refreshing…' : 'Refresh live data'}</button>
+        <button className="btn secondary" onClick={() => setAdvising(true)}>AI advisor</button>
+        <button className="btn secondary" onClick={() => setEditing(true)}>Edit</button>
+        {isAdmin && <button className="btn danger" onClick={remove}>Delete</button>}
+      </div>
+
+      {editing && <EditModal business={biz} onClose={() => setEditing(false)} onSaved={onChanged} />}
+      {advising && <AdvisorModal business={biz} onClose={() => setAdvising(false)} />}
+    </div>
+  );
+}
+
+function App() {
+  const [user] = useState(() => JSON.parse(localStorage.getItem('lp_user') || 'null'));
+  const [businesses, setBusinesses] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState('');
+  const [showNewOwner, setShowNewOwner] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true); setErr('');
+    try {
+      const data = await apiFetch('/api/businesses');
+      setBusinesses(data.businesses);
+    } catch (e) { setErr(e.message); } finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (!user) { window.location.href = '/index.html'; return null; }
+  const isAdmin = user.role === 'admin';
+
+  const signOut = () => {
+    localStorage.removeItem('lp_token');
+    localStorage.removeItem('lp_user');
+    window.location.href = '/index.html';
+  };
+
+  return (
+    <React.Fragment>
+      <header>
+        <div className="brand">
+          <PulseLogo />
+          <h1>LOCALPulse</h1>
+          <span className="role-badge">{user.role}</span>
+        </div>
+        <button className="signout" onClick={signOut}>Sign out ({user.email})</button>
+      </header>
+      <main>
+        <div className="toolbar">
+          <h2>{isAdmin ? 'All businesses' : 'Your business'}</h2>
+          {isAdmin && <button className="btn" onClick={() => setShowNewOwner(true)}>+ New owner account</button>}
+        </div>
+
+        {loading && <div className="loading">Loading…</div>}
+        {err && <div className="err">{err}</div>}
+
+        {!loading && businesses.length === 0 && (
+          <div className="empty">No businesses yet. {isAdmin ? 'Create an owner account to get started.' : ''}</div>
+        )}
+
+        <div className="grid">
+          {businesses.map(b => (
+            <BusinessCard key={b.id} biz={b} isAdmin={isAdmin} onChanged={load} />
+          ))}
+        </div>
+      </main>
+
+      {showNewOwner && <NewOwnerModal onClose={() => setShowNewOwner(false)} onCreated={load} />}
+    </React.Fragment>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
