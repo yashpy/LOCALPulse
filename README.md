@@ -119,4 +119,5 @@ as before. Push to GitHub, import the repo in Vercel, add the env vars from
 production `DATABASE_URL` to create the admin account.
 
 LIVE link: **https://local-pulse-2026.vercel.app/**
+
 **Note: IAM only restricts admin access, please reach out for admin access **
