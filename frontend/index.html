@@ -1,51 +1,111 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>LOCALPulse · Sign in</title>
-<link rel="stylesheet" href="/css/style.css" />
+<title>LOCALPulse — Sign in</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0B1220;
+    --panel:#101A2E;
+    --line:#1E2C46;
+    --pulse:#00D9A3;
+    --amber:#FFB454;
+    --text:#E7ECF5;
+    --muted:#8593AD;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+    background:radial-gradient(1200px 600px at 20% -10%, #132242 0%, var(--bg) 55%);
+    font-family:'Inter',sans-serif; color:var(--text);
+  }
+  .card{
+    width:380px; background:var(--panel); border:1px solid var(--line);
+    border-radius:14px; padding:36px 32px; box-shadow:0 20px 60px rgba(0,0,0,.4);
+  }
+  .brand{display:flex; align-items:center; gap:10px; margin-bottom:6px;}
+  .brand svg{flex-shrink:0;}
+  h1{font-family:'Space Grotesk',sans-serif; font-size:22px; margin:0; letter-spacing:.2px;}
+  .sub{color:var(--muted); font-size:13px; margin:4px 0 28px;}
+  label{display:block; font-size:12px; color:var(--muted); margin:16px 0 6px; text-transform:uppercase; letter-spacing:.06em;}
+  input{
+    width:100%; padding:11px 12px; border-radius:8px; border:1px solid var(--line);
+    background:#0C1526; color:var(--text); font-size:14px; font-family:inherit;
+  }
+  input:focus{outline:none; border-color:var(--pulse);}
+  button{
+    width:100%; margin-top:24px; padding:12px; border:none; border-radius:8px;
+    background:var(--pulse); color:#052A21; font-weight:600; font-size:14px; cursor:pointer;
+    font-family:'Space Grotesk',sans-serif;
+  }
+  button:hover{filter:brightness(1.08);}
+  button:disabled{opacity:.6; cursor:not-allowed;}
+  .err{color:#FF6B6B; font-size:13px; margin-top:14px; min-height:16px;}
+  .pulse-line{stroke:var(--pulse); stroke-width:2; fill:none;}
+</style>
 </head>
 <body>
+  <div class="card">
+    <div class="brand">
+      <svg width="28" height="20" viewBox="0 0 60 20" xmlns="http://www.w3.org/2000/svg">
+        <polyline class="pulse-line" points="0,10 14,10 19,2 25,18 31,10 60,10" />
+      </svg>
+      <h1>LOCALPulse</h1>
+    </div>
+    <div class="sub">Live signal for Tempe, AZ businesses.</div>
 
-<div class="login-wrap">
-  <h1><span class="brand"><span class="dot"></span>LOCALPulse</span></h1>
-  <p class="sub">Real-time signal for Tempe business owners.</p>
-
-  <form id="login-form">
-    <label for="email">Email</label>
-    <input id="email" type="email" required autocomplete="username" />
-
-    <label for="password">Password</label>
-    <input id="password" type="password" required autocomplete="current-password" />
-
-    <button type="submit" style="margin-top:20px; width:100%;">Sign in</button>
-    <p class="error hidden" id="err"></p>
-  </form>
-
-  <p style="margin-top:22px; font-size:12px; color:var(--muted);">
-    Business owner? <a href="/request-access.html">Request an account</a> — an admin reviews and approves it.
-  </p>
-</div>
+    <form id="loginForm">
+      <label for="email">Email</label>
+      <input id="email" type="email" autocomplete="username" required />
+      <label for="password">Password</label>
+      <input id="password" type="password" autocomplete="current-password" required />
+      <button id="submitBtn" type="submit">Sign in</button>
+      <div class="err" id="err"></div>
+    </form>
+  </div>
 
 <script src="/js/config.js"></script>
-<script src="/js/api.js"></script>
 <script>
-document.getElementById('login-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const email = document.getElementById('email').value.trim();
-  const password = document.getElementById('password').value;
-  const err = document.getElementById('err');
-  err.classList.add('hidden');
-  try {
-    const data = await api('/auth/login', { method: 'POST', body: { email, password } });
-    Auth.set(data.token, data.user);
-    window.location.href = data.user.role === 'admin' ? '/admin.html' : '/owner.html';
-  } catch (e2) {
-    err.textContent = e2.message;
-    err.classList.remove('hidden');
+  const form = document.getElementById('loginForm');
+  const errEl = document.getElementById('err');
+  const btn = document.getElementById('submitBtn');
+
+  // If already logged in, skip straight to dashboard.
+  if (localStorage.getItem('lp_token')) {
+    window.location.href = '/dashboard.html';
   }
-});
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errEl.textContent = '';
+    btn.disabled = true;
+    btn.textContent = 'Signing in…';
+
+    try {
+      const res = await fetch(`${window.LP_CONFIG.API_BASE}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: document.getElementById('email').value,
+          password: document.getElementById('password').value,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Login failed');
+
+      localStorage.setItem('lp_token', data.token);
+      localStorage.setItem('lp_user', JSON.stringify(data.user));
+      window.location.href = '/dashboard.html';
+    } catch (err) {
+      errEl.textContent = err.message;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Sign in';
+    }
+  });
 </script>
 </body>
 </html>
